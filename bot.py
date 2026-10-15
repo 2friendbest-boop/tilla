@@ -22,7 +22,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from aiohttp import web
 
 # ═══════════════════════ SOZLAMALAR (Render → Environment) ═══════════════════════
-BOT_TOKEN = os.environ[""]                                   # majburiy
+BOT_TOKEN = os.environ["BOT_TOKEN"]                                   # majburiy
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if x]
 _ch = os.getenv("REQUIRED_CHANNEL", "").strip()                       # "@kanalim" yoki https://t.me/kanalim; bo'sh = o'chiq
 if _ch.startswith("https://t.me/"):
