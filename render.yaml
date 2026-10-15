@@ -1,0 +1,22 @@
+services:
+  - type: worker
+    name: game-store-bot
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        value: "7253190744"
+      - key: REQUIRED_CHANNEL
+        value: "@Re2nrvsh"
+      - key: DB_FILE
+        value: /data/store.db
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
