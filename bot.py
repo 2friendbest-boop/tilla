@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-🎮 GAME STORE BOT  —  PUBG • Free Fire • Roblox • Standoff 2
-Hisob (balans) tizimi • Admin panel • Referal • Promokod • VIP darajalar • Rangli tugmalar
+🎮 GAME STORE BOT  —  PUBG • Free Fire • Roblox • Standoff 2 • Telegram Stars
+Hisob (balans) tizimi • Admin panel • Referal • Promokod • VIP darajalar • Rangli tugmalar • Premium emoji
 Render uchun moslangan: sozlamalar environment variable orqali, health-server, doimiy disk.
 """
 import asyncio
 import html
 import logging
 import os
+import re
 import time
 
 import aiosqlite
@@ -33,6 +34,20 @@ elif _ch and not _ch.startswith("@") and not _ch.lstrip("-").isdigit():
     _ch = "@" + _ch
 REQUIRED_CHANNEL = _ch
 DB_FILE = os.getenv("DB_FILE", "store.db")                            # Render diskida: /data/store.db
+
+# ── Premium emoji ──
+# Render → Environment: USE_PREMIUM=1  (bot egasida Telegram Premium bo'lishi kerak)
+USE_PREMIUM = os.getenv("USE_PREMIUM", "0") == "1"
+# Admin: /emojiid buyrug'i bilan ID larni oling va shu yerga qo'ying
+PREMIUM_EMOJI = {
+    "star": "",    # ⭐
+    "game": "",    # 🎮
+    "money": "",   # 💰
+    "crown": "",   # 👑
+    "gift": "",    # 🎁
+    "fire": "",    # 🔥
+}
+ICON_FALLBACK = {"star": "⭐", "game": "🎮", "money": "💰", "crown": "👑", "gift": "🎁", "fire": "🔥"}
 
 # VIP darajalar: (jami xarid summasi, nomi, chegirma %)
 LEVELS = [
@@ -80,7 +95,6 @@ SEED = [
      [("100 G", 12000), ("500 G", 55000), ("1000 G", 105000)]),
 ]
 
-# Stars paketlari: (miqdor, narx so'mda)
 STARS_PACKAGES = [
     (50, 12000),
     (100, 23000),
@@ -109,8 +123,24 @@ def fmt(n):
     return f"{int(n):,}".replace(",", " ") + " so'm"
 
 
-def B(text, cb=None, style=None, url=None):
-    kw = {"text": text}
+def pe(key, fallback=None):
+    """Matn ichida premium emoji (o'chiq bo'lsa oddiy emoji)."""
+    fb = fallback or ICON_FALLBACK.get(key, "")
+    eid = PREMIUM_EMOJI.get(key)
+    if USE_PREMIUM and eid:
+        return f'<tg-emoji emoji-id="{eid}">{fb}</tg-emoji>'
+    return fb
+
+
+def B(text, cb=None, style=None, url=None, icon=None):
+    kw = {}
+    if icon:
+        eid = PREMIUM_EMOJI.get(icon) if USE_PREMIUM else ""
+        if eid:
+            kw["icon_custom_emoji_id"] = eid                      # tugma ikonkasi (premium)
+        else:
+            text = f"{ICON_FALLBACK.get(icon, '')} {text}"        # oddiy emoji
+    kw["text"] = text
     if cb:
         kw["callback_data"] = cb
     if url:
@@ -153,8 +183,8 @@ async def many(sql, args=()):
 
 
 async def gs(key):
-    r = await one("SELECT value FROM settings WHERE key=?", (key,))
-    return r["value"] if r else DEFAULT_SETTINGS.get(key, "")
+    r_ = await one("SELECT value FROM settings WHERE key=?", (key,))
+    return r_["value"] if r_ else DEFAULT_SETTINGS.get(key, "")
 
 
 async def ss(key, value):
@@ -264,6 +294,9 @@ class S(StatesGroup):
     promo = State()
     support = State()
     admin = State()
+    stars_custom = State()
+    stars_user = State()
+    emoji = State()
 
 
 class IsAdmin(BaseFilter):
@@ -275,8 +308,8 @@ class Guard(BaseMiddleware):
     async def __call__(self, handler, event, data):
         u = event.from_user
         if u and u.id not in ADMIN_IDS:
-            r = await one("SELECT banned FROM users WHERE id=?", (u.id,))
-            if r and r["banned"]:
+            r_ = await one("SELECT banned FROM users WHERE id=?", (u.id,))
+            if r_ and r_["banned"]:
                 if isinstance(event, CallbackQuery):
                     await event.answer("🚫 Siz bloklangansiz", show_alert=True)
                 return
@@ -310,16 +343,17 @@ async def main_menu(ev, uid, name):
     u = await one("SELECT * FROM users WHERE id=?", (uid,))
     _, lname, pct = level(u["spent"])
     welcome = await gs("welcome")
-    text = (f"👑 <b>GAME STORE</b>\n\n"
+    text = (f"{pe('crown')} <b>GAME STORE</b>\n\n"
             f"Salom, <b>{e(name)}</b>! 👋\n{e(welcome)}\n\n"
-            f"💰 Balans: <b>{fmt(u['balance'])}</b>\n"
+            f"{pe('money')} Balans: <b>{fmt(u['balance'])}</b>\n"
             f"🏅 Daraja: <b>{lname}</b>" + (f" (−{pct}% chegirma)" if pct else "") + "\n\n"
             f"👇 Kerakli bo'limni tanlang:")
     rows = [
-        [B("🎮 Xarid qilish", "buy", G)],
-        [B("💰 Hisobim", "acc", P), B("➕ Hisob to'ldirish", "top", G)],
+        [B("Xarid qilish", "buy", G, icon="game")],
+        [B("Telegram Stars", "stars", P, icon="star")],
+        [B("Hisobim", "acc", P, icon="money"), B("➕ Hisob to'ldirish", "top", G)],
         [B("📦 Buyurtmalarim", "orders"), B("👥 Referal", "ref", P)],
-        [B("🎁 Promokod", "promo"), B("🏆 Top xaridorlar", "toplist")],
+        [B("Promokod", "promo", icon="gift"), B("🏆 Top xaridorlar", "toplist")],
     ]
     if int(await gs("daily_bonus") or 0) > 0:
         rows.append([B("📅 Kunlik bonus", "daily", G)])
@@ -422,7 +456,7 @@ async def player(m: Message, state: FSMContext):
     text = (f"🧾 <b>Buyurtmani tasdiqlang</b>\n\n"
             f"🎮 O'yin: <b>{e(p['gt'])}</b>\n📦 Paket: <b>{e(p['title'])}</b>\n"
             f"🆔 ID: <code>{e(pid_)}</code>\n💵 Narx: <b>{fmt(price)}</b>\n"
-            f"💰 Balansingiz: <b>{fmt(u['balance'])}</b>")
+            f"{pe('money')} Balansingiz: <b>{fmt(u['balance'])}</b>")
     if u["balance"] < price:
         text += f"\n\n⚠️ Balans yetarli emas. Yana <b>{fmt(price - u['balance'])}</b> kerak."
         rows = [[B("➕ Hisob to'ldirish", "top", G)], [B("⬅️ Menyu", "menu")]]
@@ -452,11 +486,127 @@ async def confirm(c: CallbackQuery, state: FSMContext):
     await show(c, f"✅ <b>Buyurtma #{oid} qabul qilindi!</b>\n\n"
                   f"🎮 {e(p['gt'])} • {e(p['title'])}\n🆔 <code>{e(d['player'])}</code>\n💵 {fmt(price)}\n\n"
                   f"⏳ Tez orada bajariladi. Natija haqida xabar beramiz.",
-               kb([[B("🎮 Yana xarid", "buy", G)], [B("⬅️ Menyu", "menu")]]))
+               kb([[B("Yana xarid", "buy", G, icon="game")], [B("⬅️ Menyu", "menu")]]))
     u = c.from_user
     await notify_admins(
         f"🆕 <b>Yangi buyurtma #{oid}</b>\n\n👤 {e(u.full_name)} (@{e(u.username)}) • <code>{u.id}</code>\n"
         f"🎮 {e(p['gt'])} • <b>{e(p['title'])}</b>\n🆔 <code>{e(d['player'])}</code>\n💵 {fmt(price)}",
+        kb([[B("✅ Bajarildi", f"od:{oid}", G), B("❌ Bekor + qaytarish", f"oc:{oid}", R)],
+            [B("💬 Mijozga yozish", f"reply:{u.id}", P)]]))
+
+
+# ═══════════════════════ TELEGRAM STARS ═══════════════════════
+def stars_base_price(qty):
+    for q, p in STARS_PACKAGES:
+        if q == qty:
+            return p
+    return qty * PRICE_PER_STAR
+
+
+@r.callback_query(F.data == "stars")
+async def stars_menu(c: CallbackQuery, state: FSMContext):
+    await c.answer()
+    await state.clear()
+    u = await one("SELECT spent FROM users WHERE id=?", (c.from_user.id,))
+    _, _, pct = level(u["spent"])
+    rows, line = [], []
+    for q, p in STARS_PACKAGES:
+        line.append(B(f"{q} • {fmt(disc(p, pct))}", f"sp:{q}", G, icon="star"))
+        if len(line) == 2:
+            rows.append(line)
+            line = []
+    if line:
+        rows.append(line)
+    rows.append([B("Boshqa miqdor", "sc", P, icon="star")])
+    rows.append([B("⬅️ Menyu", "menu")])
+    note = f"\n🏅 Sizga <b>−{pct}%</b> chegirma qo'llandi" if pct else ""
+    await show(c, f"{pe('star')} <b>Telegram Stars</b>\n\nKerakli miqdorni tanlang:{note}", kb(rows))
+
+
+async def stars_ask_user(ev, state, qty):
+    await state.set_state(S.stars_user)
+    await state.update_data(qty=qty)
+    await show(ev, f"{pe('star')} <b>{qty} Stars</b>\n\nStars yuboriladigan <b>Telegram @username</b> ni yozing\n"
+                   f"Masalan: <code>@username</code>",
+               kb([[B("❌ Bekor qilish", "stars", R)]]))
+
+
+@r.callback_query(F.data.startswith("sp:"))
+async def stars_pick(c: CallbackQuery, state: FSMContext):
+    await c.answer()
+    qty = int(c.data[3:])
+    if qty not in dict(STARS_PACKAGES):
+        return
+    await stars_ask_user(c, state, qty)
+
+
+@r.callback_query(F.data == "sc")
+async def stars_custom_btn(c: CallbackQuery, state: FSMContext):
+    await c.answer()
+    await state.set_state(S.stars_custom)
+    await show(c, f"{pe('star')} <b>Boshqa miqdor</b>\n\nNechta Stars kerak? ({MIN_CUSTOM} – {MAX_CUSTOM})\n"
+                  f"💵 1 ta Star = <b>{fmt(PRICE_PER_STAR)}</b>",
+               kb([[B("⬅️ Orqaga", "stars", R)]]))
+
+
+@r.message(S.stars_custom)
+async def stars_custom_in(m: Message, state: FSMContext):
+    try:
+        qty = int((m.text or "").replace(" ", ""))
+    except ValueError:
+        return await m.answer("❌ Faqat raqam yuboring. Masalan: 300")
+    if not MIN_CUSTOM <= qty <= MAX_CUSTOM:
+        return await m.answer(f"❌ Miqdor {MIN_CUSTOM} dan {MAX_CUSTOM} gacha bo'lishi kerak.")
+    await stars_ask_user(m, state, qty)
+
+
+@r.message(S.stars_user)
+async def stars_user_in(m: Message, state: FSMContext):
+    tg = (m.text or "").strip()
+    if tg.startswith("https://t.me/"):
+        tg = tg[len("https://t.me/"):]
+    tg = tg.lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", tg):
+        return await m.answer("❌ Username noto'g'ri. Masalan: <code>@username</code>")
+    d = await state.get_data()
+    qty = d["qty"]
+    u = await one("SELECT * FROM users WHERE id=?", (m.from_user.id,))
+    _, _, pct = level(u["spent"])
+    price = disc(stars_base_price(qty), pct)
+    await state.update_data(tg_user="@" + tg, price=price)
+    text = (f"🧾 <b>Buyurtmani tasdiqlang</b>\n\n"
+            f"{pe('star')} Miqdor: <b>{qty} Stars</b>\n👤 Qabul qiluvchi: <b>@{e(tg)}</b>\n"
+            f"💵 Narx: <b>{fmt(price)}</b>\n{pe('money')} Balansingiz: <b>{fmt(u['balance'])}</b>")
+    if u["balance"] < price:
+        text += f"\n\n⚠️ Balans yetarli emas. Yana <b>{fmt(price - u['balance'])}</b> kerak."
+        rows = [[B("➕ Hisob to'ldirish", "top", G)], [B("⬅️ Menyu", "menu")]]
+    else:
+        rows = [[B("✅ Tasdiqlash", "sok", G), B("❌ Bekor", "menu", R)]]
+    await m.answer(text, reply_markup=kb(rows))
+
+
+@r.callback_query(F.data == "sok")
+async def stars_confirm(c: CallbackQuery, state: FSMContext):
+    d = await state.get_data()
+    if not d.get("qty") or not d.get("tg_user"):
+        return await c.answer("Sessiya tugagan, qaytadan boshlang", show_alert=True)
+    qty, price, tg = d["qty"], d["price"], d["tg_user"]
+    cur = await ex("UPDATE users SET balance=balance-?, spent=spent+? WHERE id=? AND balance>=?",
+                   (price, price, c.from_user.id, price))
+    if cur.rowcount == 0:
+        return await c.answer("❌ Balans yetarli emas", show_alert=True)
+    await c.answer("✅")
+    cur = await ex("INSERT INTO orders(user_id,game,title,price,player_id,created) VALUES(?,?,?,?,?,?)",
+                   (c.from_user.id, "Telegram Stars", f"{qty} Stars", price, tg, int(time.time())))
+    oid = cur.lastrowid
+    await state.clear()
+    await show(c, f"✅ <b>Buyurtma #{oid} qabul qilindi!</b>\n\n{pe('star')} {qty} Stars\n"
+                  f"👤 <code>{e(tg)}</code>\n💵 {fmt(price)}\n\n⏳ Tez orada yuboriladi. Natija haqida xabar beramiz.",
+               kb([[B("Yana Stars", "stars", G, icon="star")], [B("⬅️ Menyu", "menu")]]))
+    u = c.from_user
+    await notify_admins(
+        f"🆕 <b>Yangi buyurtma #{oid}</b>\n\n👤 {e(u.full_name)} (@{e(u.username)}) • <code>{u.id}</code>\n"
+        f"{pe('star')} <b>Telegram Stars — {qty}</b>\n📨 Yuborish: <b>{e(tg)}</b>\n💵 {fmt(price)}",
         kb([[B("✅ Bajarildi", f"od:{oid}", G), B("❌ Bekor + qaytarish", f"oc:{oid}", R)],
             [B("💬 Mijozga yozish", f"reply:{u.id}", P)]]))
 
@@ -472,7 +622,7 @@ async def account(c: CallbackQuery):
         th, nn, np_ = LEVELS[idx + 1]
         nxt = f"\n📈 Keyingi daraja: {nn} (−{np_}%) uchun yana <b>{fmt(th - u['spent'])}</b>"
     cnt = (await one("SELECT COUNT(*) n FROM orders WHERE user_id=?", (u["id"],)))["n"]
-    await show(c, f"💰 <b>Hisobim</b>\n\n🆔 ID: <code>{u['id']}</code>\n"
+    await show(c, f"{pe('money')} <b>Hisobim</b>\n\n🆔 ID: <code>{u['id']}</code>\n"
                   f"💵 Balans: <b>{fmt(u['balance'])}</b>\n🛒 Jami xarid: <b>{fmt(u['spent'])}</b>\n"
                   f"📦 Buyurtmalar: <b>{cnt}</b>\n🏅 Daraja: <b>{lname}</b> (−{pct}%){nxt}",
                kb([[B("➕ Hisob to'ldirish", "top", G)], [B("📦 Buyurtmalarim", "orders", P)],
@@ -487,7 +637,7 @@ async def my_orders(c: CallbackQuery):
     text = "📦 <b>Oxirgi buyurtmalar</b>\n\n" + ("\n".join(
         f"{icon.get(o['status'], '•')} <b>#{o['id']}</b> {e(o['game'])} • {e(o['title'])} • {fmt(o['price'])}"
         for o in rows) if rows else "Hozircha buyurtmalar yo'q.")
-    await show(c, text, kb([[B("🎮 Xarid qilish", "buy", G)], [B("⬅️ Menyu", "menu")]]))
+    await show(c, text, kb([[B("Xarid qilish", "buy", G, icon="game")], [B("⬅️ Menyu", "menu")]]))
 
 
 @r.callback_query(F.data == "toplist")
@@ -583,7 +733,7 @@ async def referral(c: CallbackQuery):
 async def promo(c: CallbackQuery, state: FSMContext):
     await c.answer()
     await state.set_state(S.promo)
-    await show(c, "🎁 <b>Promokodni yuboring:</b>", kb([[B("⬅️ Menyu", "menu")]]))
+    await show(c, f"{pe('gift')} <b>Promokodni yuboring:</b>", kb([[B("⬅️ Menyu", "menu")]]))
 
 
 @r.message(S.promo)
@@ -667,6 +817,23 @@ async def admin_cmd(m: Message, state: FSMContext):
     await m.answer("⚙️ <b>Admin panel</b>", reply_markup=admin_kb())
 
 
+@adm.message(Command("emojiid"))
+async def emojiid_cmd(m: Message, state: FSMContext):
+    await state.set_state(S.emoji)
+    await m.answer("✨ Menga <b>premium emoji</b> yuboring — ID sini qaytaraman.\nChiqish: /admin")
+
+
+@adm.message(S.emoji)
+async def emojiid_get(m: Message, state: FSMContext):
+    if (m.text or "").startswith("/"):
+        await state.clear()
+        return await m.answer("Chiqildi. Buyruqni qayta yuboring.")
+    ids = [en.custom_emoji_id for en in (m.entities or []) if en.type == "custom_emoji"]
+    if not ids:
+        return await m.answer("❌ Premium emoji topilmadi. Boshqa emoji yuboring.")
+    await m.answer("\n".join(f"<code>{i}</code>" for i in ids))
+
+
 @adm.callback_query(F.data == "adm")
 async def admin_cb(c: CallbackQuery, state: FSMContext):
     await c.answer()
@@ -720,7 +887,7 @@ async def order_done(c: CallbackQuery):
     await append_status(c, "✅ <b>Bajarildi</b>")
     await safe_send(o["user_id"], f"✅ <b>Buyurtma #{oid} bajarildi!</b>\n🎮 {e(o['game'])} • {e(o['title'])}\n\n"
                                   f"Xaridingiz uchun rahmat! 🙏",
-                    kb([[B("🎮 Yana xarid", "buy", G)]]))
+                    kb([[B("Yana xarid", "buy", G, icon="game")]]))
 
 
 @adm.callback_query(F.data.startswith("oc:"))
@@ -749,7 +916,7 @@ async def tup_ok(c: CallbackQuery):
     await credit(t["user_id"], t["amount"])
     await append_status(c, "✅ <b>Tasdiqlandi</b>")
     await safe_send(t["user_id"], f"✅ Hisobingiz <b>{fmt(t['amount'])}</b> ga to'ldirildi! 💰",
-                    kb([[B("🎮 Xarid qilish", "buy", G)]]))
+                    kb([[B("Xarid qilish", "buy", G, icon="game")]]))
 
 
 @adm.callback_query(F.data.startswith("tup_no:"))
