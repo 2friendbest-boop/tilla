@@ -95,7 +95,6 @@ SEED = [
      [("100 G", 12000), ("500 G", 55000), ("1000 G", 105000)]),
 ]
 
-# Stars paketlari: (miqdor, narx so'mda)
 STARS_PACKAGES = [
     (50, 12000),
     (100, 23000),
