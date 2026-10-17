@@ -42,19 +42,19 @@ DB_FILE = os.getenv("DB_FILE", "store.db")                            # Render d
 # u avtomatik premium ikonkaga almashadi.
 USE_PREMIUM = os.getenv("USE_PREMIUM", "0") == "1"
 PREMIUM_EMOJI = {
-    "🎮": "",   # Xarid qilish
-    "⭐": "",   # Telegram Stars
-    "💰": "",   # Hisobim / Balans
-    "➕": "",   # Hisob to'ldirish / qo'shish
-    "➖": "",   # Hisob ayirish
-    "📦": "",   # Buyurtmalarim
-    "👥": "",   # Referal
-    "🎁": "",   # Promokod
-    "🏆": "",   # Top xaridorlar
-    "📅": "",   # Kunlik bonus
-    "🆘": "",   # Yordam
-    "⚙️": "",   # Admin panel / Sozlamalar
-    "⬅️": "",   # Orqaga / Menyu
+    "🎮": "5264959791213586839",   # Xarid qilish
+    "⭐": "5807791714093502248",   # Telegram Stars
+    "💰": "5256186332669035163",   # Hisobim / Balans
+    "➕": "5222040745665379997",   # Hisob to'ldirish / qo'shish
+    "➖": "5417835132025328839",   # Hisob ayirish
+    "📦": "5436261671301564151",   # Buyurtmalarim
+    "👥": "5310008912907360202",   # Referal
+    "🎁": "5841267724285646096",   # Promokod
+    "🏆": "5415655814079723871",   # Top xaridorlar
+    "📅": "5399817885952520170",   # Kunlik bonus
+    "🆘": "5213285132709929474",   # Yordam
+    "⚙️": "5341715473882955310",   # Admin panel / Sozlamalar
+    "⬅️": "5352759161945867747",   # Orqaga / Menyu
     "❌": "",   # Bekor
     "✅": "",   # Tasdiqlash / Bajarildi
     "📢": "",   # Kanal / Xabar yuborish
@@ -68,13 +68,13 @@ PREMIUM_EMOJI = {
     "🟢": "",   # Yoqish
     "🔴": "",   # O'chirish
     "✏️": "",   # Tahrirlash
-    "💵": "",   # Narx
+    "💵": "5298877105000439431",   # Narx
     "🗑": "",   # Butunlay o'chirish
     "👨‍💻": "",  # Admin bilan bog'lanish
-    "🔫": "",   # PUBG
-    "🔥": "",   # Free Fire
-    "🧱": "",   # Roblox
-    "🎯": "",   # Standoff 2
+    "🔫": "5204252919565657978",   # PUBG
+    "🔥": "6156638827709467651",   # Free Fire
+    "🧱": "5235507619916950217",   # Roblox
+    "🎯": "5294063533288334126",   # Standoff 2
     "👑": "",   # Menyu sarlavhasi
 }
 
@@ -369,6 +369,9 @@ adm.callback_query.filter(IsAdmin())
 # ═══════════════════════ FOYDALANUVCHI: MENYU ═══════════════════════
 async def main_menu(ev, uid, name):
     u = await one("SELECT * FROM users WHERE id=?", (uid,))
+    if not u:  # baza tozalangan yoki foydalanuvchi /start bosmagan bo'lsa — avtomatik yaratamiz
+        await ex("INSERT OR IGNORE INTO users(id,name,joined) VALUES(?,?,?)", (uid, name, int(time.time())))
+        u = await one("SELECT * FROM users WHERE id=?", (uid,))
     _, lname, pct = level(u["spent"])
     welcome = await gs("welcome")
     text = (f"{pe('👑')} <b>GAME STORE</b>\n\n"
@@ -1194,6 +1197,8 @@ async def main():
     dp.include_router(r)
     me = await bot.get_me()
     logging.info("Bot ishga tushdi: @%s", me.username)
+    logging.info("Premium emoji: USE_PREMIUM=%s, ID kiritilgan: %d ta",
+                 USE_PREMIUM, sum(1 for v in PREMIUM_EMOJI.values() if v))
     await bot.delete_webhook(drop_pending_updates=True)
     await start_web()
     await dp.start_polling(bot)
